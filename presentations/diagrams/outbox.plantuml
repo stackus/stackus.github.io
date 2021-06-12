@@ -1,0 +1,75 @@
+@startuml
+!include theme.plantuml
+
+skinparam linetype polyline
+
+together {
+    node Microservice as service
+    node "CDC/Message Relay" as cdc
+}
+database Database as db {
+    rectangle Transaction as tx {
+        rectangle ServiceData as data
+        rectangle Outbox as outbox
+    }
+}
+queue "Message Broker" as broker
+node "Other Services" as svc1
+node "Other Services" as svc2
+node "Other Services" as svc3
+
+service --> data: Step 1
+service --> outbox: Step 1
+outbox --> cdc: Step 2
+cdc --> broker: Step 3
+outbox <-- cdc: Step 4
+broker --> svc1: Step 5
+broker --> svc2: Step 5
+broker --> svc3: Step 5
+@enduml
+
+@startuml
+!include theme.plantuml
+
+skinparam linetype polyline
+
+together {
+node Microservice as service
+database Database as db {
+  rectangle ServiceData as data
+}
+}
+queue "Message Broker" as broker
+node "Other Services" as svc1
+node "Other Services" as svc2
+node "Other Services" as svc3
+
+service --> data: Step 1
+service -right-> broker: Step 2
+broker --> svc1: Step 3
+broker --> svc2: Step 3
+broker --> svc3: Step 3
+@enduml
+
+@startuml
+!include theme.plantuml
+
+skinparam linetype polyline
+
+together {
+node Microservice as service
+database Database as db {
+  rectangle ServiceData as data
+}
+}
+queue "Message Broker" as broker
+node "Other Services" as svc1
+node "Other Services" as svc2
+node "Other Services" as svc3
+
+service --> data: Step 1
+service -[$DANGER]right-> broker: $failure("Step 2")
+broker -[hidden]-> svc1
+broker -[hidden]-> svc2
+broker -[hidden]-> svc3
+@enduml

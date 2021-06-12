@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+
+	<title>Outbox Pattern</title>
+	<meta name="description" content="A Pattern For Distributed Data Resilience And Reliability">
+	<meta name="author" content="Michael Stack">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" href="dist/reset.css">
+	<link rel="stylesheet" href="dist/reveal.css">
+	<link rel="stylesheet" href="dist/theme/moon.css" id="theme">
+	<!-- Theme used for syntax highlighting of code -->
+	<link rel="stylesheet" href="plugin/highlight/monokai.css">
+</head>
+<body>
+<div class="reveal">
+	<div class="slides">
+		<section>
+			<h2>The Outbox Pattern</h2>
+			<p>
+				<small>A Pattern For Distributed Data Resilience And Reliability</small>
+			</p>
+			<p>
+				<small>Michael Stack 2021</small>
+			</p>
+		</section>
+		<section>
+			<p>
+				When a service does work it could make changes into two or more systems, and many things can go wrong
+				before the second or subsequent changes causing them to fail or never happen.
+			</p>
+			<p>
+				This is called "Dual Writes" and it can be the source of hidden errors in a distributed system.
+			</p>
+		</section>
+		<section>
+			<section>
+				<h3>Dual Writes: When Everything Is Working</h3>
+				<ol>
+					<li class="fragment">Your service writes the big order update to the database</li>
+					<li class="fragment">You send on an event about the order to notify anyone that's listening</li>
+					<li class="fragment">Anyone that is listening gets the update and takes action</li>
+				</ol>
+			</section>
+			<section>
+				<img alt="normal and working architecture" src="diagrams/without_outbox.png"/>
+			</section>
+		</section>
+		<section>
+			<section>
+				<h3>Dual Writes: When It Doesn't</h3>
+				<ol>
+					<li class="fragment">Your service writes the big order update to the database</li>
+					<li class="fragment">
+						<div class="fragment highlight-red">
+							You send on an event about the order to notify anyone that's listening
+						</div>
+					</li>
+				</ol>
+			</section>
+			<section>
+				<img alt="normal and broken architecture" src="diagrams/broken_messages.png"/>
+			</section>
+		</section>
+		<section>
+			<h3>Broken Solutions</h3>
+			<ul>
+				<li>
+					Publish the message <strong>BEFORE</strong> writing changes into the database.
+					<small class="fragment">Now remote systems have record of things that never "happened".</small>
+				</li>
+				<li>
+					The missing data is small or happens infrequently and we've got logs.
+					<small class="fragment">Little errors over time compound and snowball into bigger errors.</small>
+				</li>
+			</ul>
+		</section>
+		<section>
+			<section>
+				<h3>How The Outbox Works</h3>
+			</section>
+			<section>
+				<p>
+					The publishing of messages gets broken up into two separate events.
+				</p>
+				<ol>
+					<li>The messages are written into the database along with the other changes.</li>
+					<li>They are then read by a second process to be published to the message broker.</li>
+				</ol>
+			</section>
+			<section>
+				<h3>Writing the Messages</h3>
+				<p>
+					During the first action a transaction or atomic write is used to ensure that all of the changes make it into
+					the system.
+				</p>
+				<p>
+					<small>
+						Most databases whether they are SQL or NoSQL offer some way to perform an atomic write.
+					</small>
+				</p>
+			</section>
+			<section>
+				<h3>Publishing the messages</h3>
+				<p>
+					During the second action a message is pushed or polled into the Message Relay and published into the message
+					broker if it is available.
+				</p>
+				<p>
+					<small>Relational databases may offer a write ahead log that can be followed</small>
+					<small>Some databases such as AWS DynamoDB offer streams that can be processed using serverless
+					       functions</small>
+				</p>
+			</section>
+		</section>
+		<section>
+			<section>
+				<h3>Outbox Message Publication</h3>
+				<ol>
+					<li class="fragment">The service writes both the data and messages within a single transaction to the
+					                     database
+					</li>
+					<li class="fragment">The Message Relay will receive or poll the database for new unpublished messages</li>
+					<li class="fragment">The Message Relay will publish messages into the message broker</li>
+					<li class="fragment">(Optional) The Message Relay will update the database marking messages as
+					                     published
+					</li>
+					<li class="fragment">The other services will receive the messages at-least-once</li>
+				</ol>
+			</section>
+			<section>
+				<img alt="outbox normal architecture" class="r-frame" src="diagrams/outbox_architecture.png">
+			</section>
+		</section>
+		<section>
+			<h3>At-Least-Once Guarantee</h3>
+			<p>
+				The consumers of the message will now be guaranteed to receive the message at-least-once.
+			</p>
+			<p>
+				There are situations where the Message Relay may fail after publishing but before marking messages as published
+				and that would result in sending the message again. It is for this reason that it is important for the message
+				consumers to be idempotent.
+			</p>
+			<p>
+				If the Message Relay is down then publishing has stopped but no messages are lost.
+			</p>
+		</section>
+		<section>
+			<h3>Re-Playability</h3>
+			<p>
+				The messages may now reside forever or for a duration of your choosing in the publishing systems database.
+				Should a need to replay the message come up then it'll be a simple matter of running a special process to
+				re-publish the messages from the desired timeframe. Functionally this isn't much different than how the
+				Message Relay functions, just on a ad-hoc basis.
+			</p>
+		</section>
+		<section>
+			<h3>Asynchronous Only</h3>
+			<p>
+				This Outbox Pattern can only be applied to improve asynchronous actions. Synchronous calls in your system will
+				require different methods to ensure reliability, or should be refactored to be asynchronous.
+			</p>
+		</section>
+		<section>
+			<p>
+				<small>
+					Examples of the OutBox and CDC services using PostgreSQL can be found in the
+					<a href="https://github.com/stackus/ftgogo">ftgogo</a> demonstration application.
+				</small>
+			</p>
+		</section>
+	</div>
+</div>
+<script src="dist/reveal.js"></script>
+<script src="plugin/markdown/markdown.js"></script>
+<script src="plugin/highlight/highlight.js"></script>
+<script>
+	// Also available as an ES module, see:
+	// https://revealjs.com/initialization/
+	Reveal.initialize({
+		controls: true,
+		progress: true,
+		center: true,
+		hash: true,
+
+		// Learn about plugins: https://revealjs.com/plugins/
+		plugins: [RevealMarkdown, RevealHighlight]
+	});
+</script>
+</body>
